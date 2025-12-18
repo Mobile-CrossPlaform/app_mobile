@@ -15,9 +15,9 @@ sealed class AppException implements Exception {
 /// Exception liée au réseau
 class NetworkException extends AppException {
   const NetworkException([
-    String message = 'Erreur de connexion réseau',
-    dynamic error,
-  ]) : super(message, error);
+    super.message = 'Erreur de connexion réseau',
+    super.error,
+  ]);
 }
 
 /// Exception liée à l'API
@@ -45,25 +45,25 @@ class ApiException extends AppException {
 /// Exception liée au parsing des données
 class ParseException extends AppException {
   const ParseException([
-    String message = 'Erreur de format des données',
-    dynamic error,
-  ]) : super(message, error);
+    super.message = 'Erreur de format des données',
+    super.error,
+  ]);
 }
 
 /// Exception liée à la localisation
 class LocationException extends AppException {
   const LocationException([
-    String message = 'Erreur de géolocalisation',
-    dynamic error,
-  ]) : super(message, error);
+    super.message = 'Erreur de géolocalisation',
+    super.error,
+  ]);
 }
 
 /// Exception liée aux permissions
 class PermissionException extends AppException {
   const PermissionException([
-    String message = 'Permission refusée',
-    dynamic error,
-  ]) : super(message, error);
+    super.message = 'Permission refusée',
+    super.error,
+  ]);
 }
 
 /// Exception de validation
