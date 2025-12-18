@@ -1,15 +1,30 @@
 /// Constantes globales de l'application
 library;
 
+import 'dart:io' show Platform;
+
 /// Configuration du serveur API
 class ApiConfig {
   ApiConfig._();
 
-  /// URL de base pour l'émulateur Android (10.0.2.2 pointe vers localhost)
-  static const String baseUrl = 'http://10.0.2.2:3000';
+  /// Port du serveur local Docker
+  static const int port = 3000;
+
+  /// URL de base adaptée à la plateforme
+  /// - Android emulator: 10.0.2.2 pointe vers localhost de la machine hôte
+  /// - iOS simulator: 127.0.0.1 pointe vers localhost
+  static String get baseUrl {
+    if (Platform.isAndroid) {
+      return 'http://10.0.2.2:$port';
+    } else if (Platform.isIOS) {
+      return 'http://127.0.0.1:$port';
+    }
+    // Fallback pour autres plateformes (desktop, web)
+    return 'http://localhost:$port';
+  }
 
   /// URL de l'API
-  static const String apiUrl = '$baseUrl/api';
+  static String get apiUrl => '$baseUrl/api';
 
   /// Timeout des requêtes HTTP en secondes
   static const int timeoutSeconds = 30;

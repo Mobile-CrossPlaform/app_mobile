@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'views/loading_screen_view.dart';
 import 'views/map_view.dart';
 import 'views/positions_list_view.dart';
 import 'views/my_positions_view.dart';
+import 'viewmodels/app_bootstrap_viewmodel.dart';
 import 'viewmodels/positions_viewmodel.dart';
 import 'viewmodels/my_positions_viewmodel.dart';
 
@@ -17,6 +19,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => AppBootstrapViewModel()),
         ChangeNotifierProvider(create: (_) => PositionsViewModel()),
         ChangeNotifierProvider(create: (_) => MyPositionsViewModel()),
       ],
@@ -27,7 +30,7 @@ class MyApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
           useMaterial3: true,
         ),
-        home: const MainScreen(),
+        home: const LoadingScreenView(),
       ),
     );
   }
