@@ -1,5 +1,5 @@
 /// Barrel file pour les widgets réutilisables
-library widgets;
+library;
 
 export 'state_widgets.dart';
 export 'position_image.dart';

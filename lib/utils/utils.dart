@@ -1,4 +1,4 @@
 /// Barrel file pour les utilitaires
-library utils;
+library;
 
 export 'date_formatter.dart';
