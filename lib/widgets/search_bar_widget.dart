@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../core/core.dart';
+import '../core/constants.dart';
 
-/// Barre de recherche réutilisable
+/// Widget de barre de recherche réutilisable
 class SearchBarWidget extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode? focusNode;
@@ -40,9 +40,11 @@ class SearchBarWidget extends StatelessWidget {
                 },
               )
             : null,
-        border: elevated ? InputBorder.none : OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppSizes.cardBorderRadius),
-        ),
+        border: elevated
+            ? InputBorder.none
+            : OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSizes.cardBorderRadius),
+              ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.lg,
           vertical: 14,

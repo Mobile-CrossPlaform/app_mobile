@@ -1,7 +1,4 @@
 /// Constantes globales de l'application
-/// 
-/// Ce fichier centralise toutes les valeurs constantes pour éviter
-/// les "magic numbers" et faciliter la maintenance.
 library;
 
 /// Configuration du serveur API
@@ -11,17 +8,14 @@ class ApiConfig {
   /// URL de base pour l'émulateur Android (10.0.2.2 pointe vers localhost)
   static const String baseUrl = 'http://10.0.2.2:3000';
 
-  /// Chemin de l'API
-  static const String apiPath = '/api';
-
-  /// URL complète de l'API
-  static String get fullApiUrl => '$baseUrl$apiPath';
+  /// URL de l'API
+  static const String apiUrl = '$baseUrl/api';
 
   /// Timeout des requêtes HTTP en secondes
   static const int timeoutSeconds = 30;
 }
 
-/// Constantes d'espacement de l'interface utilisateur
+/// Constantes de l'interface utilisateur
 class AppSpacing {
   AppSpacing._();
 
@@ -91,7 +85,8 @@ class MapConfig {
   static const double focusZoom = 16.0;
 
   /// URL des tuiles OpenStreetMap
-  static const String tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  static const String tileUrl =
+      'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
   /// Package name pour les tuiles
   static const String userAgentPackageName = 'dev_mobile';

@@ -1,43 +1,15 @@
 import '../core/constants.dart';
 
-/// Modèle représentant une position géographique
-///
-/// Ce modèle contient toutes les informations d'un lieu enregistré:
-/// - Identifiant unique
-/// - Titre et description
-/// - Coordonnées GPS (latitude, longitude)
-/// - Image (URL distante ou chemin local)
-/// - Auteur et dates de création/modification
 class PositionModel {
-  /// Identifiant unique de la position
-  final String? id;
-
-  /// Titre/nom de la position
+  final int? id;
   final String title;
-
-  /// Description détaillée du lieu
   final String description;
-
-  /// Latitude GPS
   final double latitude;
-
-  /// Longitude GPS
   final double longitude;
-
-  /// URL de l'image sur le serveur
   final String? imageUrl;
-
-  /// Chemin local de l'image (pour le mode hors ligne)
   final String? localImagePath;
-
-  /// Identifiant de l'auteur
   final String authorId;
-
-  /// Date de création
   final DateTime createdAt;
-
-  /// Date de dernière modification
-  final DateTime? updatedAt;
 
   const PositionModel({
     this.id,
@@ -49,50 +21,64 @@ class PositionModel {
     this.localImagePath,
     required this.authorId,
     required this.createdAt,
-    this.updatedAt,
   });
 
-  /// Vérifie si la position a une image (locale ou distante)
-  bool get hasImage =>
-      (imageUrl != null && imageUrl!.isNotEmpty) ||
-      (localImagePath != null && localImagePath!.isNotEmpty);
-
-  /// Retourne l'URL complète de l'image (avec le domaine du serveur)
+  /// Retourne l'URL complète de l'image (avec le serveur)
   String? get fullImageUrl {
     if (imageUrl == null || imageUrl!.isEmpty) return null;
+    // Si l'URL commence déjà par http, la retourner telle quelle
     if (imageUrl!.startsWith('http')) return imageUrl;
+    // Sinon, ajouter le base URL du serveur
     return '${ApiConfig.baseUrl}$imageUrl';
   }
 
-  /// Parse sécurisé d'un double depuis différents types
-  static double _parseDouble(dynamic value, double defaultValue) {
-    if (value == null) return defaultValue;
-    if (value is num) return value.toDouble();
-    if (value is String) return double.tryParse(value) ?? defaultValue;
-    return defaultValue;
-  }
+  /// Indique si la position a une image (locale ou distante)
+  bool get hasImage => fullImageUrl != null || localImagePath != null;
 
-  /// Crée une instance depuis un JSON de l'API
+  /// Crée un PositionModel depuis la réponse JSON de l'API
+  /// L'API utilise: name, lat, lng, imageUri, author
+  /// Le modèle utilise: title, latitude, longitude, imageUrl, authorId
   factory PositionModel.fromJson(Map<String, dynamic> json) {
+    // Extraire l'URL de l'image avec plusieurs clés possibles
+    final imageUrl =
+        json['imageUri'] ??
+        json['imageUrl'] ??
+        json['image_url'] ??
+        json['image'];
+
     return PositionModel(
-      id: json['id']?.toString(),
+      id: json['id'],
       title: json['name'] ?? json['title'] ?? '',
       description: json['description'] ?? '',
-      latitude: _parseDouble(json['lat'] ?? json['latitude'], 0.0),
-      longitude: _parseDouble(json['lng'] ?? json['longitude'], 0.0),
-      imageUrl: json['imageUri'] ?? json['imageUrl'],
-      localImagePath: null, // Les images locales ne viennent pas de l'API
-      authorId: json['author'] ?? json['authorId'] ?? '',
-      createdAt: json['createdAt'] != null
-          ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
-          : DateTime.now(),
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.tryParse(json['updatedAt'].toString())
-          : null,
+      latitude: _parseDouble(json['lat'] ?? json['latitude']),
+      longitude: _parseDouble(json['lng'] ?? json['longitude']),
+      imageUrl: imageUrl,
+      // localImagePath est UNIQUEMENT pour les images capturées localement
+      localImagePath: json['local_image_path'],
+      authorId: json['author'] ?? json['author_id'] ?? '',
+      createdAt: _parseDateTime(json['createdAt'] ?? json['created_at']),
     );
   }
 
-  /// Convertit l'instance en JSON pour l'API
+  /// Parse une valeur en double de manière sécurisée
+  static double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+
+  /// Parse une date de manière sécurisée
+  static DateTime _parseDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is DateTime) return value;
+    if (value is String) {
+      return DateTime.tryParse(value) ?? DateTime.now();
+    }
+    return DateTime.now();
+  }
+
+  /// Convertit en JSON pour l'envoi à l'API
   Map<String, dynamic> toJson() {
     return {
       if (id != null) 'id': id,
@@ -101,15 +87,13 @@ class PositionModel {
       'lat': latitude,
       'lng': longitude,
       if (imageUrl != null) 'imageUri': imageUrl,
+      if (localImagePath != null) 'imagePath': localImagePath,
       'author': authorId,
-      'createdAt': createdAt.toIso8601String(),
-      if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
     };
   }
 
-  /// Crée une copie avec des valeurs modifiées
   PositionModel copyWith({
-    String? id,
+    int? id,
     String? title,
     String? description,
     double? latitude,
@@ -118,7 +102,6 @@ class PositionModel {
     String? localImagePath,
     String? authorId,
     DateTime? createdAt,
-    DateTime? updatedAt,
   }) {
     return PositionModel(
       id: id ?? this.id,
@@ -130,13 +113,7 @@ class PositionModel {
       localImagePath: localImagePath ?? this.localImagePath,
       authorId: authorId ?? this.authorId,
       createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
     );
-  }
-
-  @override
-  String toString() {
-    return 'PositionModel(id: $id, title: $title, lat: $latitude, lng: $longitude)';
   }
 
   @override
@@ -147,4 +124,9 @@ class PositionModel {
 
   @override
   int get hashCode => id.hashCode;
+
+  @override
+  String toString() {
+    return 'PositionModel(id: $id, title: $title, lat: $latitude, lng: $longitude)';
+  }
 }

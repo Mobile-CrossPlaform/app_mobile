@@ -1,47 +1,40 @@
-import 'package:intl/intl.dart';
+/// Utilitaires pour le formatage des dates
+library;
 
-/// Utilitaire pour le formatage des dates
+/// Classe utilitaire pour formater les dates
 class DateFormatter {
-  static final DateFormat _fullFormat = DateFormat('dd/MM/yyyy HH:mm');
-  static final DateFormat _dateOnly = DateFormat('dd/MM/yyyy');
-  static final DateFormat _timeOnly = DateFormat('HH:mm');
-  static final DateFormat _relative = DateFormat('dd MMM yyyy', 'fr_FR');
+  DateFormatter._();
 
-  /// Format complet : 25/12/2024 14:30
-  static String full(DateTime date) {
-    return _fullFormat.format(date);
+  /// Formate une date au format "dd/MM/yyyy"
+  static String formatDate(DateTime date) {
+    return '${_pad(date.day)}/${_pad(date.month)}/${date.year}';
   }
 
-  /// Date uniquement : 25/12/2024
-  static String dateOnly(DateTime date) {
-    return _dateOnly.format(date);
+  /// Formate une date avec l'heure au format "dd/MM/yyyy à HH:mm"
+  static String formatDateTime(DateTime date) {
+    return '${formatDate(date)} à ${_pad(date.hour)}:${_pad(date.minute)}';
   }
 
-  /// Heure uniquement : 14:30
-  static String timeOnly(DateTime date) {
-    return _timeOnly.format(date);
-  }
-
-  /// Format relatif lisible : 25 déc 2024
-  static String readable(DateTime date) {
-    return _relative.format(date);
-  }
-
-  /// Format relatif intelligent (aujourd'hui, hier, ou date)
-  static String smart(DateTime date) {
+  /// Formate une date relative (il y a X minutes/heures/jours)
+  static String formatRelative(DateTime date) {
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final dateDay = DateTime(date.year, date.month, date.day);
-    final difference = today.difference(dateDay).inDays;
+    final difference = now.difference(date);
 
-    if (difference == 0) {
-      return 'Aujourd\'hui à ${timeOnly(date)}';
-    } else if (difference == 1) {
-      return 'Hier à ${timeOnly(date)}';
-    } else if (difference < 7) {
-      return 'Il y a $difference jours';
+    if (difference.inMinutes < 1) {
+      return 'À l\'instant';
+    } else if (difference.inMinutes < 60) {
+      return 'Il y a ${difference.inMinutes} min';
+    } else if (difference.inHours < 24) {
+      return 'Il y a ${difference.inHours}h';
+    } else if (difference.inDays < 7) {
+      return 'Il y a ${difference.inDays}j';
     } else {
-      return readable(date);
+      return formatDate(date);
     }
+  }
+
+  /// Ajoute un zéro devant les nombres < 10
+  static String _pad(int number) {
+    return number.toString().padLeft(2, '0');
   }
 }

@@ -1,40 +1,19 @@
 import 'package:flutter/material.dart';
-import '../core/core.dart';
+import '../core/constants.dart';
 
-/// Widget d'état de chargement
-class LoadingWidget extends StatelessWidget {
-  final String? message;
-
-  const LoadingWidget({super.key, this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const CircularProgressIndicator(),
-          if (message != null) ...[
-            const SizedBox(height: AppSpacing.lg),
-            Text(message!, style: TextStyle(color: Colors.grey[600])),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// Widget d'état d'erreur
-class ErrorStateWidget extends StatelessWidget {
-  final String message;
-  final VoidCallback? onRetry;
+/// Widget d'état vide
+class EmptyStateWidget extends StatelessWidget {
   final IconData icon;
+  final String title;
+  final String? subtitle;
+  final Widget? action;
 
-  const ErrorStateWidget({
+  const EmptyStateWidget({
     super.key,
-    required this.message,
-    this.onRetry,
-    this.icon = Icons.error_outline,
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.action,
   });
 
   @override
@@ -45,13 +24,72 @@ class ErrorStateWidget extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 64, color: Colors.red[300]),
+            Icon(icon, size: 80, color: Colors.grey[400]),
             const SizedBox(height: AppSpacing.lg),
             Text(
-              message,
+              title,
+              style: Theme.of(context).textTheme.titleMedium,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16),
             ),
+            if (subtitle != null) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                subtitle!,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+            ],
+            if (action != null) ...[
+              const SizedBox(height: AppSpacing.lg),
+              action!,
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Widget d'état d'erreur
+class ErrorStateWidget extends StatelessWidget {
+  final String title;
+  final String? message;
+  final VoidCallback? onRetry;
+
+  const ErrorStateWidget({
+    super.key,
+    this.title = 'Erreur de chargement',
+    this.message,
+    this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleLarge,
+              textAlign: TextAlign.center,
+            ),
+            if (message != null) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                message!,
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+              ),
+            ],
             if (onRetry != null) ...[
               const SizedBox(height: AppSpacing.lg),
               ElevatedButton.icon(
@@ -67,40 +105,29 @@ class ErrorStateWidget extends StatelessWidget {
   }
 }
 
-/// Widget d'état vide
-class EmptyStateWidget extends StatelessWidget {
-  final String message;
-  final IconData icon;
-  final Widget? action;
+/// Widget de chargement centré
+class LoadingWidget extends StatelessWidget {
+  final String? message;
 
-  const EmptyStateWidget({
-    super.key,
-    required this.message,
-    this.icon = Icons.inbox_outlined,
-    this.action,
-  });
+  const LoadingWidget({super.key, this.message});
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 64, color: Colors.grey[400]),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CircularProgressIndicator(),
+          if (message != null) ...[
             const SizedBox(height: AppSpacing.lg),
             Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+              message!,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
             ),
-            if (action != null) ...[
-              const SizedBox(height: AppSpacing.lg),
-              action!,
-            ],
           ],
-        ),
+        ],
       ),
     );
   }

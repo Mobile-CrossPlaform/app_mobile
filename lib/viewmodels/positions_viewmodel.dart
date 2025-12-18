@@ -1,102 +1,97 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/position_model.dart';
-import '../services/services.dart';
+import '../services/api_service.dart';
+import '../services/location_service.dart';
 
-/// ViewModel pour la gestion des positions (toutes)
-///
-/// Ce ViewModel gère:
-/// - Le chargement des positions depuis l'API
-/// - La recherche/filtrage des positions
-/// - La position de l'utilisateur
 class PositionsViewModel extends ChangeNotifier {
   final ApiService _apiService = ApiService();
   final LocationService _locationService = LocationService();
 
-  // État
   List<PositionModel> _positions = [];
-  List<PositionModel> _allPositions = [];
-  bool _isLoading = false;
-  String? _error;
-  String _searchQuery = '';
+  List<PositionModel> _filteredPositions = [];
   LatLng? _userPosition;
+  bool _isLoading = false;
+  String _searchQuery = '';
+  String? _error;
 
   // Getters
-  List<PositionModel> get positions => _positions;
-  List<PositionModel> get filteredPositions => _positions;
-  bool get isLoading => _isLoading;
-  String? get error => _error;
-  String get searchQuery => _searchQuery;
+  List<PositionModel> get positions =>
+      _filteredPositions.isEmpty && _searchQuery.isEmpty
+      ? _positions
+      : _filteredPositions;
+  List<PositionModel> get allPositions => _positions;
+  List<PositionModel> get filteredPositions => _filteredPositions;
   LatLng? get userPosition => _userPosition;
-  bool get hasError => _error != null;
-  bool get isEmpty => _positions.isEmpty && !_isLoading;
+  bool get isLoading => _isLoading;
+  String get searchQuery => _searchQuery;
+  String? get error => _error;
 
-  /// Initialise le ViewModel
+  // Initialisation
   Future<void> init() async {
-    await getUserLocation();
-    await loadPositions();
+    await Future.wait([loadPositions(), getUserLocation()]);
   }
 
-  /// Charge toutes les positions
+  // Charger toutes les positions
   Future<void> loadPositions() async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      _allPositions = await _apiService.getPositions();
+      _positions = await _apiService.getAllPositions();
       _applySearch();
     } catch (e) {
       _error = e.toString();
-      _positions = [];
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  /// Récupère la position de l'utilisateur
+  // Obtenir la position de l'utilisateur
   Future<void> getUserLocation() async {
-    try {
-      _userPosition = await _locationService.getCurrentLocation();
-      notifyListeners();
-    } catch (e) {
-      debugPrint('Erreur localisation: $e');
-      // Ne pas bloquer si la localisation échoue
-    }
+    _userPosition = await _locationService.getCurrentPosition();
+    notifyListeners();
   }
 
-  /// Effectue une recherche
+  // Recherche
   void search(String query) {
     _searchQuery = query;
     _applySearch();
     notifyListeners();
   }
 
-  /// Efface la recherche
-  void clearSearch() {
-    _searchQuery = '';
-    _positions = List.from(_allPositions);
-    notifyListeners();
-  }
-
-  /// Applique le filtre de recherche
   void _applySearch() {
     if (_searchQuery.isEmpty) {
-      _positions = List.from(_allPositions);
+      _filteredPositions = [];
     } else {
-      final query = _searchQuery.toLowerCase();
-      _positions = _allPositions.where((p) =>
-        p.title.toLowerCase().contains(query) ||
-        p.description.toLowerCase().contains(query) ||
-        p.authorId.toLowerCase().contains(query)
-      ).toList();
+      final queryLower = _searchQuery.toLowerCase();
+      _filteredPositions = _positions.where((position) {
+        return position.title.toLowerCase().contains(queryLower) ||
+            position.description.toLowerCase().contains(queryLower);
+      }).toList();
     }
   }
 
-  /// Efface l'erreur
-  void clearError() {
-    _error = null;
+  void clearSearch() {
+    _searchQuery = '';
+    _filteredPositions = [];
     notifyListeners();
+  }
+
+  // Centrer sur une position
+  PositionModel? getPositionById(int id) {
+    try {
+      return _positions.firstWhere((p) => p.id == id);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _locationService.dispose();
+    super.dispose();
   }
 }

@@ -2,118 +2,195 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../core/core.dart';
+import '../core/constants.dart';
 import '../models/position_model.dart';
-import '../services/services.dart';
+import '../services/api_service.dart';
+import '../services/location_service.dart';
+import '../services/image_service.dart';
 
-/// ViewModel pour la gestion de mes positions
-///
-/// Ce ViewModel gère:
-/// - Le nom d'utilisateur
-/// - Le CRUD des positions de l'utilisateur
-/// - La sélection d'images
 class MyPositionsViewModel extends ChangeNotifier {
   final ApiService _apiService = ApiService();
   final LocationService _locationService = LocationService();
   final ImageService _imageService = ImageService();
 
-  // État
-  List<PositionModel> _positions = [];
-  bool _isLoading = false;
-  bool _isSaving = false;
-  String? _error;
-  String? _username;
-  File? _selectedImage;
+  // ID de l'utilisateur courant
+  String _currentUserId = '';
+  bool _isUsernameSet = false;
+
+  List<PositionModel> _myPositions = [];
   LatLng? _userPosition;
+  bool _isLoading = false;
+  String? _error;
+
+  // Pour la création/modification d'une position
+  File? _selectedImage;
+  bool _isSaving = false;
 
   // Getters
-  List<PositionModel> get positions => _positions;
-  bool get isLoading => _isLoading;
-  bool get isSaving => _isSaving;
-  bool get isCreating => _isSaving; // Alias pour compatibilité
-  String? get error => _error;
-  String? get username => _username;
-  bool get hasUsername => _username != null && _username!.isNotEmpty;
-  File? get selectedImage => _selectedImage;
+  List<PositionModel> get myPositions => _myPositions;
   LatLng? get userPosition => _userPosition;
+  bool get isLoading => _isLoading;
+  String? get error => _error;
+  File? get selectedImage => _selectedImage;
+  bool get isSaving => _isSaving;
 
-  /// Charge le nom d'utilisateur depuis les préférences
-  Future<void> loadUsername() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      _username = prefs.getString(StorageKeys.username);
-      notifyListeners();
+  /// @deprecated Utiliser isSaving à la place
+  bool get isCreating => _isSaving;
+  String get currentUserId => _currentUserId;
+  bool get isUsernameSet => _isUsernameSet;
 
-      if (hasUsername) {
-        await loadMyPositions();
-      }
-    } catch (e) {
-      debugPrint('Erreur chargement username: $e');
+  // Initialisation
+  Future<void> init() async {
+    await _loadUsername();
+    if (_isUsernameSet) {
+      await Future.wait([loadMyPositions(), getUserLocation()]);
+    } else {
+      await getUserLocation();
     }
   }
 
-  /// Sauvegarde le nom d'utilisateur
-  Future<void> saveUsername(String username) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(StorageKeys.username, username);
-      _username = username;
-      notifyListeners();
-      await loadMyPositions();
-    } catch (e) {
-      _error = 'Erreur lors de la sauvegarde du nom';
-      notifyListeners();
+  // Charger le nom d'utilisateur depuis les préférences
+  Future<void> _loadUsername() async {
+    final prefs = await SharedPreferences.getInstance();
+    final username = prefs.getString(StorageKeys.username);
+    if (username != null && username.isNotEmpty) {
+      _currentUserId = username;
+      _isUsernameSet = true;
+    } else {
+      _isUsernameSet = false;
     }
+    notifyListeners();
   }
 
-  /// Charge mes positions
+  // Enregistrer le nom d'utilisateur
+  Future<void> setUsername(String username) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(StorageKeys.username, username);
+    _currentUserId = username;
+    _isUsernameSet = true;
+    notifyListeners();
+    // Charger les positions après avoir défini le username
+    await loadMyPositions();
+  }
+
+  // Charger mes positions
   Future<void> loadMyPositions() async {
-    if (!hasUsername) return;
+    if (!_isUsernameSet) return;
 
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      _positions = await _apiService.getMyPositions(_username!);
+      _myPositions = await _apiService.getMyPositions(_currentUserId);
     } catch (e) {
       _error = e.toString();
-      _positions = [];
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  /// Crée une nouvelle position
+  // Obtenir la position de l'utilisateur
+  Future<void> getUserLocation() async {
+    _userPosition = await _locationService.getCurrentPosition();
+    notifyListeners();
+  }
+
+  // Sélectionner une image depuis la galerie
+  Future<void> pickImageFromGallery() async {
+    _selectedImage = await _imageService.pickImageFromGallery();
+    notifyListeners();
+  }
+
+  // Prendre une photo
+  Future<void> takePhoto() async {
+    _selectedImage = await _imageService.takePhoto();
+    notifyListeners();
+  }
+
+  // Afficher le dialog de sélection d'image
+  Future<void> showImagePicker(BuildContext context) async {
+    await showModalBottomSheet<File?>(
+      context: context,
+      builder: (BuildContext ctx) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Choisir depuis la galerie'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await pickImageFromGallery();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Prendre une photo'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await takePhoto();
+                },
+              ),
+              if (_selectedImage != null)
+                ListTile(
+                  leading: const Icon(Icons.delete, color: Colors.red),
+                  title: const Text(
+                    'Supprimer l\'image',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    clearSelectedImage();
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Supprimer l'image sélectionnée
+  void clearSelectedImage() {
+    _selectedImage = null;
+    notifyListeners();
+  }
+
+  // Créer une nouvelle position
   Future<bool> createPosition({
     required String title,
     required String description,
     required double latitude,
     required double longitude,
   }) async {
-    if (!hasUsername) return false;
-
     _isSaving = true;
     _error = null;
     notifyListeners();
 
     try {
-      final position = PositionModel(
+      final newPosition = PositionModel(
         title: title,
         description: description,
         latitude: latitude,
         longitude: longitude,
-        authorId: _username!,
+        authorId: currentUserId,
         createdAt: DateTime.now(),
       );
 
-      await _apiService.createPosition(position, imageFile: _selectedImage);
+      final createdPosition = await _apiService.createPosition(
+        newPosition,
+        _selectedImage,
+      );
+      _myPositions.insert(0, createdPosition);
       _selectedImage = null;
-      await loadMyPositions();
+
+      notifyListeners();
       return true;
     } catch (e) {
       _error = e.toString();
+      notifyListeners();
       return false;
     } finally {
       _isSaving = false;
@@ -121,28 +198,29 @@ class MyPositionsViewModel extends ChangeNotifier {
     }
   }
 
-  /// Met à jour une position
+  // Modifier une position existante
   Future<bool> updatePosition({
-    required String id,
+    required int id,
     required String title,
     required String description,
     required double latitude,
     required double longitude,
     String? existingImageUrl,
     String? existingLocalImagePath,
+    DateTime? originalCreatedAt,
   }) async {
     _isSaving = true;
     _error = null;
     notifyListeners();
 
     try {
-      // Trouver la position existante pour préserver createdAt
-      final existingPosition = _positions.firstWhere(
+      // Récupérer la position originale pour conserver createdAt
+      final originalPosition = _myPositions.firstWhere(
         (p) => p.id == id,
         orElse: () => throw Exception('Position non trouvée'),
       );
 
-      final position = PositionModel(
+      final updatedPosition = PositionModel(
         id: id,
         title: title,
         description: description,
@@ -150,17 +228,27 @@ class MyPositionsViewModel extends ChangeNotifier {
         longitude: longitude,
         imageUrl: existingImageUrl,
         localImagePath: existingLocalImagePath,
-        authorId: _username!,
-        createdAt: existingPosition.createdAt, // Préserver la date de création
-        updatedAt: DateTime.now(),
+        authorId: _currentUserId,
+        createdAt: originalCreatedAt ?? originalPosition.createdAt,
       );
 
-      await _apiService.updatePosition(position, imageFile: _selectedImage);
+      final result = await _apiService.updatePosition(
+        updatedPosition,
+        _selectedImage,
+      );
+
+      // Mettre à jour la position dans la liste locale
+      final index = _myPositions.indexWhere((p) => p.id == id);
+      if (index != -1) {
+        _myPositions[index] = result;
+      }
       _selectedImage = null;
-      await loadMyPositions();
+
+      notifyListeners();
       return true;
     } catch (e) {
       _error = e.toString();
+      notifyListeners();
       return false;
     } finally {
       _isSaving = false;
@@ -168,53 +256,23 @@ class MyPositionsViewModel extends ChangeNotifier {
     }
   }
 
-  /// Supprime une position
-  Future<bool> deletePosition(String id) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
+  // Supprimer une position
+  Future<bool> deletePosition(int id) async {
     try {
       await _apiService.deletePosition(id);
-      await loadMyPositions();
+      _myPositions.removeWhere((p) => p.id == id);
+      notifyListeners();
       return true;
     } catch (e) {
       _error = e.toString();
+      notifyListeners();
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
-  /// Affiche le dialogue de sélection d'image
-  Future<void> showImagePicker(BuildContext context) async {
-    final file = await _imageService.showImageSourceDialog(context);
-    if (file != null) {
-      _selectedImage = file;
-      notifyListeners();
-    }
-  }
-
-  /// Efface l'image sélectionnée
-  void clearSelectedImage() {
-    _selectedImage = null;
-    notifyListeners();
-  }
-
-  /// Récupère la position GPS de l'utilisateur
-  Future<void> getUserLocation() async {
-    try {
-      _userPosition = await _locationService.getCurrentLocation();
-      notifyListeners();
-    } catch (e) {
-      debugPrint('Erreur localisation: $e');
-    }
-  }
-
-  /// Efface l'erreur
-  void clearError() {
-    _error = null;
-    notifyListeners();
+  @override
+  void dispose() {
+    _locationService.dispose();
+    super.dispose();
   }
 }

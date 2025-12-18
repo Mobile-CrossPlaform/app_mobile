@@ -1,13 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
-import '../core/core.dart';
 import '../models/position_model.dart';
-import '../services/services.dart';
-import '../viewmodels/viewmodels.dart';
-import '../widgets/widgets.dart';
+import '../viewmodels/my_positions_viewmodel.dart';
+import '../core/constants.dart';
 
-/// Vue d'édition d'une position existante
 class EditPositionView extends StatefulWidget {
   final PositionModel position;
 
@@ -19,316 +18,426 @@ class EditPositionView extends StatefulWidget {
 
 class _EditPositionViewState extends State<EditPositionView> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _titleController;
-  late final TextEditingController _descriptionController;
-  final _imageService = ImageService();
+  late TextEditingController _titleController;
+  late TextEditingController _descriptionController;
 
-  File? _newImage;
-  bool _isSubmitting = false;
-  bool _hasChanges = false;
+  late MapController _mapController;
+  late LatLng _selectedPosition;
 
   @override
   void initState() {
     super.initState();
+    _mapController = MapController();
     _titleController = TextEditingController(text: widget.position.title);
-    _descriptionController = TextEditingController(text: widget.position.description ?? '');
-    
-    _titleController.addListener(_onFieldChanged);
-    _descriptionController.addListener(_onFieldChanged);
-  }
-
-  void _onFieldChanged() {
-    final changed = _titleController.text != widget.position.title ||
-        _descriptionController.text != (widget.position.description ?? '') ||
-        _newImage != null;
-    if (changed != _hasChanges) {
-      setState(() => _hasChanges = changed);
-    }
+    _descriptionController = TextEditingController(
+      text: widget.position.description,
+    );
+    _selectedPosition = LatLng(
+      widget.position.latitude,
+      widget.position.longitude,
+    );
   }
 
   @override
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
+    _mapController.dispose();
     super.dispose();
-  }
-
-  Future<void> _pickImage() async {
-    final file = await _imageService.showImageSourceDialog(context);
-    if (file != null) {
-      setState(() {
-        _newImage = file;
-        _hasChanges = true;
-      });
-    }
-  }
-
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _isSubmitting = true);
-
-    try {
-      final viewModel = context.read<MyPositionsViewModel>();
-      final updatedPosition = widget.position.copyWith(
-        title: _titleController.text.trim(),
-        description: _descriptionController.text.trim(),
-        image: _newImage?.path ?? widget.position.image,
-      );
-
-      await viewModel.updatePosition(updatedPosition);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Position mise à jour!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.pop(context);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isSubmitting = false);
-      }
-    }
-  }
-
-  Future<bool> _onWillPop() async {
-    if (!_hasChanges) return true;
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Modifications non sauvegardées'),
-        content: const Text('Voulez-vous quitter sans sauvegarder ?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuler'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Quitter'),
-          ),
-        ],
-      ),
-    );
-
-    return result ?? false;
   }
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _onWillPop,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Modifier la position'),
-          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-          actions: [
-            if (_hasChanges)
-              TextButton(
-                onPressed: _isSubmitting ? null : _submit,
-                child: const Text('Enregistrer'),
-              ),
-          ],
-        ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Form(
+    return Consumer<MyPositionsViewModel>(
+      builder: (context, viewModel, child) {
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Modifier la position'),
+            actions: [
+              if (viewModel.isCreating)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              else
+                IconButton(
+                  icon: const Icon(Icons.check),
+                  onPressed: () => _savePosition(viewModel),
+                ),
+            ],
+          ),
+          body: Form(
             key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Image actuelle / nouvelle
-                Center(
-                  child: GestureDetector(
-                    onTap: _pickImage,
-                    child: Container(
-                      width: 200,
-                      height: 200,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200],
-                        borderRadius: BorderRadius.circular(AppSizes.cardBorderRadius),
-                        border: Border.all(color: Colors.grey[400]!),
-                      ),
-                      child: Stack(
-                        children: [
-                          // Image
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(AppSizes.cardBorderRadius),
-                            child: _newImage != null
-                                ? Image.file(
-                                    _newImage!,
-                                    width: 200,
-                                    height: 200,
-                                    fit: BoxFit.cover,
-                                  )
-                                : PositionImage(
-                                    imagePath: widget.position.image,
-                                    width: 200,
-                                    height: 200,
-                                    fit: BoxFit.cover,
-                                  ),
-                          ),
-                          // Bouton changer
-                          Positioned(
-                            bottom: 8,
-                            right: 8,
-                            child: Container(
-                              padding: const EdgeInsets.all(AppSpacing.sm),
-                              decoration: BoxDecoration(
-                                color: Colors.black54,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: const Icon(
-                                Icons.camera_alt,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Image
+                  _buildImageSection(viewModel),
+                  const SizedBox(height: AppSpacing.xl),
+
+                  // Titre
+                  TextFormField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Titre *',
+                      hintText: 'Ex: Tour Eiffel',
+                      prefixIcon: Icon(Icons.title),
+                      border: OutlineInputBorder(),
                     ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Veuillez entrer un titre';
+                      }
+                      return null;
+                    },
                   ),
-                ),
-                const SizedBox(height: AppSpacing.xl),
+                  const SizedBox(height: AppSpacing.md),
 
-                // Titre
-                TextFormField(
-                  controller: _titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Titre *',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.title),
+                  // Description
+                  TextFormField(
+                    controller: _descriptionController,
+                    decoration: const InputDecoration(
+                      labelText: 'Description *',
+                      hintText: 'Décrivez ce lieu...',
+                      prefixIcon: Icon(Icons.description),
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 3,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Veuillez entrer une description';
+                      }
+                      return null;
+                    },
                   ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Le titre est requis';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: AppSpacing.lg),
+                  const SizedBox(height: AppSpacing.xl),
 
-                // Description
-                TextFormField(
-                  controller: _descriptionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Description',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.description),
+                  // Carte pour modifier la position
+                  Text(
+                    'Position sur la carte *',
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: AppSpacing.lg),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Appuyez sur la carte pour modifier la position',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: Colors.grey),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  _buildMapSection(viewModel),
+                  const SizedBox(height: AppSpacing.sm),
 
-                // Informations non modifiables
-                Card(
-                  color: Colors.grey[100],
-                  child: Padding(
+                  // Afficher les coordonnées sélectionnées
+                  Container(
                     padding: const EdgeInsets.all(AppSpacing.md),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(
+                        AppSizes.buttonBorderRadius,
+                      ),
+                      border: Border.all(color: Colors.green.withOpacity(0.3)),
+                    ),
+                    child: Row(
                       children: [
-                        Text(
-                          'Informations',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey[700],
+                        const Icon(Icons.check_circle, color: Colors.green),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            'Position: ${_selectedPosition.latitude.toStringAsFixed(6)}, ${_selectedPosition.longitude.toStringAsFixed(6)}',
+                            style: const TextStyle(fontWeight: FontWeight.w500),
                           ),
-                        ),
-                        const SizedBox(height: AppSpacing.md),
-                        _InfoRow(
-                          icon: Icons.location_on,
-                          label: 'Position',
-                          value: '${widget.position.latitude.toStringAsFixed(4)}, '
-                              '${widget.position.longitude.toStringAsFixed(4)}',
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        _InfoRow(
-                          icon: Icons.person,
-                          label: 'Créé par',
-                          value: widget.position.username,
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        _InfoRow(
-                          icon: Icons.access_time,
-                          label: 'Date de création',
-                          value: '${widget.position.createdAt.day}/'
-                              '${widget.position.createdAt.month}/'
-                              '${widget.position.createdAt.year}',
                         ),
                       ],
                     ),
                   ),
-                ),
-                const SizedBox(height: AppSpacing.xl),
 
-                // Bouton submit
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: _isSubmitting || !_hasChanges ? null : _submit,
-                    child: _isSubmitting
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text(
-                            'Enregistrer les modifications',
-                            style: TextStyle(fontSize: 16),
+                  const SizedBox(height: AppSpacing.xl),
+
+                  // Bouton de sauvegarde
+                  SizedBox(
+                    width: double.infinity,
+                    height: AppSizes.buttonHeight,
+                    child: ElevatedButton.icon(
+                      onPressed: viewModel.isCreating
+                          ? null
+                          : () => _savePosition(viewModel),
+                      icon: viewModel.isCreating
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save),
+                      label: Text(
+                        viewModel.isCreating
+                            ? 'Enregistrement...'
+                            : 'Enregistrer les modifications',
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(
+                            AppSizes.buttonBorderRadius,
                           ),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
-}
 
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
+  Widget _buildImageSection(MyPositionsViewModel viewModel) {
+    // Déterminer quelle image afficher (nouvelle sélectionnée > locale existante > URL existante)
+    final hasNewImage = viewModel.selectedImage != null;
+    final hasLocalImage = widget.position.localImagePath != null;
+    final hasUrlImage = widget.position.fullImageUrl != null;
 
-  const _InfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: Colors.grey[600]),
-        const SizedBox(width: AppSpacing.sm),
         Text(
-          '$label: ',
-          style: TextStyle(color: Colors.grey[600], fontSize: 13),
+          'Photo (optionnel)',
+          style: Theme.of(context).textTheme.titleMedium,
         ),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(fontSize: 13),
-            overflow: TextOverflow.ellipsis,
+        const SizedBox(height: AppSpacing.md),
+        GestureDetector(
+          onTap: () => viewModel.showImagePicker(context),
+          child: Container(
+            height: AppSizes.detailImageHeight,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(AppSizes.cardBorderRadius),
+              border: Border.all(
+                color: Colors.grey[300]!,
+                style: BorderStyle.solid,
+                width: 2,
+              ),
+            ),
+            child: hasNewImage
+                ? _buildImageWithRemove(
+                    child: Image.file(
+                      viewModel.selectedImage!,
+                      fit: BoxFit.cover,
+                    ),
+                    onRemove: viewModel.clearSelectedImage,
+                  )
+                : hasLocalImage
+                ? _buildExistingImage(
+                    child: Image.file(
+                      File(widget.position.localImagePath!),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _buildPlaceholder(),
+                    ),
+                  )
+                : hasUrlImage
+                ? _buildExistingImage(
+                    child: Image.network(
+                      widget.position.fullImageUrl!,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return const Center(child: CircularProgressIndicator());
+                      },
+                      errorBuilder: (_, __, ___) => _buildPlaceholder(),
+                    ),
+                  )
+                : _buildPlaceholder(),
           ),
         ),
       ],
     );
+  }
+
+  Widget _buildImageWithRemove({
+    required Widget child,
+    required VoidCallback onRemove,
+  }) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(AppSizes.cardBorderRadius - 2),
+          child: child,
+        ),
+        Positioned(
+          top: AppSpacing.sm,
+          right: AppSpacing.sm,
+          child: CircleAvatar(
+            backgroundColor: Colors.black54,
+            child: IconButton(
+              icon: const Icon(Icons.close, color: Colors.white),
+              onPressed: onRemove,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildExistingImage({required Widget child}) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(AppSizes.cardBorderRadius - 2),
+          child: child,
+        ),
+        Positioned(
+          bottom: AppSpacing.sm,
+          left: AppSpacing.sm,
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm,
+              vertical: AppSpacing.xs,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(AppSpacing.xs),
+            ),
+            child: const Text(
+              'Appuyez pour modifier',
+              style: TextStyle(color: Colors.white, fontSize: 12),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPlaceholder() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.add_a_photo, size: 48, color: Colors.grey[400]),
+        const SizedBox(height: AppSpacing.sm),
+        Text(
+          'Appuyez pour ajouter une photo',
+          style: TextStyle(color: Colors.grey[600]),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMapSection(MyPositionsViewModel viewModel) {
+    return Container(
+      height: AppSizes.mapSectionHeight,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppSizes.cardBorderRadius),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          GestureDetector(
+            // Empêcher le scroll parent de capturer les gestes sur la carte
+            onVerticalDragUpdate: (_) {},
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: _selectedPosition,
+                initialZoom: MapConfig.detailZoom - 1,
+                interactionOptions: const InteractionOptions(
+                  flags: InteractiveFlag.all,
+                ),
+                onTap: (tapPosition, point) {
+                  setState(() {
+                    _selectedPosition = point;
+                  });
+                },
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: MapConfig.tileUrl,
+                  userAgentPackageName: MapConfig.userAgentPackageName,
+                ),
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: _selectedPosition,
+                      width: AppSizes.markerSize,
+                      height: AppSizes.markerSize,
+                      child: const Icon(
+                        Icons.location_pin,
+                        color: Colors.red,
+                        size: AppSizes.markerSize,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // Bouton pour centrer sur ma position
+          Positioned(
+            bottom: AppSpacing.sm,
+            right: AppSpacing.sm,
+            child: FloatingActionButton.small(
+              heroTag: 'center_map_edit',
+              onPressed: () async {
+                await viewModel.getUserLocation();
+                if (viewModel.userPosition != null) {
+                  _mapController.move(
+                    viewModel.userPosition!,
+                    MapConfig.detailZoom,
+                  );
+                  setState(() {
+                    _selectedPosition = viewModel.userPosition!;
+                  });
+                }
+              },
+              child: const Icon(Icons.my_location),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _savePosition(MyPositionsViewModel viewModel) async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    final success = await viewModel.updatePosition(
+      id: widget.position.id!,
+      title: _titleController.text.trim(),
+      description: _descriptionController.text.trim(),
+      latitude: _selectedPosition.latitude,
+      longitude: _selectedPosition.longitude,
+      existingImageUrl: widget.position.imageUrl,
+      existingLocalImagePath: widget.position.localImagePath,
+    );
+
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Position modifiée avec succès'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(viewModel.error ?? 'Erreur lors de la modification'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }

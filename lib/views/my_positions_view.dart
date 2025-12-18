@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../core/core.dart';
+import '../core/constants.dart';
 import '../models/position_model.dart';
-import '../viewmodels/viewmodels.dart';
+import '../viewmodels/my_positions_viewmodel.dart';
 import '../widgets/widgets.dart';
-import '../utils/utils.dart';
 import 'add_position_view.dart';
 import 'edit_position_view.dart';
 
-/// Vue des positions de l'utilisateur avec CRUD
 class MyPositionsView extends StatefulWidget {
   const MyPositionsView({super.key});
 
@@ -20,235 +18,288 @@ class _MyPositionsViewState extends State<MyPositionsView> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<MyPositionsViewModel>().loadMyPositions();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final viewModel = context.read<MyPositionsViewModel>();
+      await viewModel.init();
+
+      // Demander le nom d'utilisateur si non défini
+      if (!viewModel.isUsernameSet && mounted) {
+        _showUsernameDialog();
+      }
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<MyPositionsViewModel>(
-      builder: (context, viewModel, _) {
-        return Column(
-          children: [
-            // En-tête utilisateur
-            _buildUserHeader(viewModel),
+  void _showUsernameDialog() {
+    final controller = TextEditingController();
 
-            // Liste ou état
-            Expanded(
-              child: _buildContent(viewModel),
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Bienvenue !'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Veuillez entrer votre nom d\'utilisateur pour commencer à ajouter vos positions.',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Nom d\'utilisateur',
+                hintText: 'Entrez votre nom',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.person),
+              ),
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
             ),
           ],
-        );
-      },
-    );
-  }
-
-  Widget _buildUserHeader(MyPositionsViewModel viewModel) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            child: Text(
-              viewModel.username.isNotEmpty ? viewModel.username[0].toUpperCase() : '?',
-              style: const TextStyle(fontSize: 20, color: Colors.white),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  viewModel.username.isEmpty ? 'Utilisateur' : viewModel.username,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                Text(
-                  '${viewModel.myPositions.length} position(s)',
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: () => _showEditUsernameDialog(viewModel),
-            tooltip: 'Modifier le nom',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              final username = controller.text.trim();
+              if (username.isNotEmpty) {
+                Navigator.pop(context);
+                await context.read<MyPositionsViewModel>().setUsername(
+                  username,
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Veuillez entrer un nom d\'utilisateur'),
+                  ),
+                );
+              }
+            },
+            child: const Text('Confirmer'),
           ),
         ],
       ),
     );
   }
 
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<MyPositionsViewModel>(
+      builder: (context, viewModel, child) {
+        // Si le username n'est pas défini, afficher un message
+        if (!viewModel.isUsernameSet) {
+          return Scaffold(
+            body: EmptyStateWidget(
+              icon: Icons.person_outline,
+              title: 'Configuration requise',
+              subtitle: 'Veuillez définir votre nom d\'utilisateur',
+              action: ElevatedButton(
+                onPressed: _showUsernameDialog,
+                child: const Text('Définir mon nom'),
+              ),
+            ),
+          );
+        }
+
+        return Scaffold(
+          body: _buildContent(viewModel),
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: () => _navigateToAddPosition(context),
+            icon: const Icon(Icons.add_location_alt),
+            label: const Text('Nouvelle position'),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildContent(MyPositionsViewModel viewModel) {
     if (viewModel.isLoading) {
-      return const LoadingWidget(message: 'Chargement de vos positions...');
+      return const LoadingWidget();
     }
 
-    if (viewModel.errorMessage != null) {
+    if (viewModel.error != null) {
       return ErrorStateWidget(
-        message: viewModel.errorMessage!,
+        message: viewModel.error,
         onRetry: viewModel.loadMyPositions,
       );
     }
 
     if (viewModel.myPositions.isEmpty) {
       return const EmptyStateWidget(
-        icon: Icons.add_location_alt,
-        title: 'Aucune position',
-        subtitle: 'Ajoutez votre première position avec le bouton +',
+        icon: Icons.add_location,
+        title: 'Vous n\'avez pas encore de positions',
+        subtitle: 'Appuyez sur le bouton + pour en ajouter une',
       );
     }
 
     return RefreshIndicator(
       onRefresh: viewModel.loadMyPositions,
       child: ListView.builder(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         itemCount: viewModel.myPositions.length,
         itemBuilder: (context, index) {
           final position = viewModel.myPositions[index];
-          return _MyPositionCard(
-            position: position,
-            onEdit: () => _navigateToEdit(position),
-            onDelete: () => _confirmDelete(viewModel, position),
-          );
+          return _buildPositionCard(position, viewModel);
         },
       ),
     );
   }
 
-  void _showEditUsernameDialog(MyPositionsViewModel viewModel) {
-    final controller = TextEditingController(text: viewModel.username);
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Modifier le nom'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Nom d\'utilisateur',
-            border: OutlineInputBorder(),
+  Widget _buildPositionCard(
+    PositionModel position,
+    MyPositionsViewModel viewModel,
+  ) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppSizes.cardBorderRadius),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Image - utiliser le widget PositionImage
+          PositionImage(
+            imageUrl: position.fullImageUrl,
+            localImagePath: position.localImagePath,
+            height: position.hasImage ? AppSizes.cardImageHeight : 100,
           ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Annuler'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              viewModel.setUsername(controller.text);
-              Navigator.pop(context);
-            },
-            child: const Text('Enregistrer'),
+
+          // Contenu
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        position.title,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, color: Colors.blue),
+                      onPressed: () =>
+                          _navigateToEditPosition(context, position),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      onPressed: () =>
+                          _confirmDelete(context, position, viewModel),
+                    ),
+                  ],
+                ),
+                Text(
+                  position.description,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Row(
+                  children: [
+                    Icon(Icons.location_on, size: 14, color: Colors.grey[500]),
+                    const SizedBox(width: AppSpacing.xs),
+                    Text(
+                      '${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Row(
+                  children: [
+                    Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
+                    const SizedBox(width: AppSpacing.xs),
+                    Text(
+                      _formatDate(position.createdAt),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  void _navigateToEdit(PositionModel position) {
+  void _confirmDelete(
+    BuildContext context,
+    PositionModel position,
+    MyPositionsViewModel viewModel,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Supprimer la position'),
+        content: Text('Voulez-vous vraiment supprimer "${position.title}" ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              if (position.id != null) {
+                final success = await viewModel.deletePosition(position.id!);
+                if (context.mounted && success) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Position supprimée')),
+                  );
+                }
+              }
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToAddPosition(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AddPositionView()),
+    ).then((_) {
+      // Recharger les positions après ajout
+      Provider.of<MyPositionsViewModel>(
+        context,
+        listen: false,
+      ).loadMyPositions();
+    });
+  }
+
+  void _navigateToEditPosition(BuildContext context, PositionModel position) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => EditPositionView(position: position),
       ),
-    );
+    ).then((_) {
+      // Recharger les positions après modification
+      Provider.of<MyPositionsViewModel>(
+        context,
+        listen: false,
+      ).loadMyPositions();
+    });
   }
 
-  void _confirmDelete(MyPositionsViewModel viewModel, PositionModel position) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Supprimer'),
-        content: Text('Voulez-vous supprimer "${position.title}" ?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Annuler'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
-              Navigator.pop(context);
-              viewModel.deletePosition(position.id!);
-            },
-            child: const Text('Supprimer', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MyPositionCard extends StatelessWidget {
-  final PositionModel position;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-
-  const _MyPositionCard({
-    required this.position,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: AppSpacing.md),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Row(
-          children: [
-            // Image
-            PositionImage(
-              imagePath: position.image,
-              width: 60,
-              height: 60,
-              borderRadius: AppSizes.cardBorderRadius,
-            ),
-            const SizedBox(width: AppSpacing.md),
-
-            // Informations
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    position.title,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    DateFormatter.smart(position.createdAt),
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-
-            // Actions
-            IconButton(
-              icon: const Icon(Icons.edit, color: Colors.blue),
-              onPressed: onEdit,
-              tooltip: 'Modifier',
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: onDelete,
-              tooltip: 'Supprimer',
-            ),
-          ],
-        ),
-      ),
-    );
+  String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 }

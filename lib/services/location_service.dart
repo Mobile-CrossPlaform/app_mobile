@@ -1,94 +1,104 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
-import '../core/core.dart';
+import '../core/exceptions.dart';
 
-/// Service de géolocalisation
-///
-/// Ce service gère la récupération de la position GPS de l'utilisateur
-/// et la gestion des permissions associées.
 class LocationService {
-  // Singleton
+  // Singleton pattern
   static final LocationService _instance = LocationService._internal();
   factory LocationService() => _instance;
   LocationService._internal();
 
-  /// Récupère la position actuelle de l'utilisateur
-  ///
-  /// Gère automatiquement les demandes de permissions.
-  /// Retourne null si la position ne peut pas être obtenue.
-  Future<LatLng?> getCurrentLocation() async {
-    try {
-      // Vérifier les permissions
-      LocationPermission permission = await Geolocator.checkPermission();
+  StreamSubscription<Position>? _positionStream;
 
+  /// Vérifie et demande les permissions de localisation
+  Future<bool> _checkAndRequestPermission() async {
+    LocationPermission permission = await Geolocator.checkPermission();
+
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          throw const LocationException(
-            'Permission de localisation refusée',
-            null,
-            null,
-            LocationErrorType.permissionDenied,
-          );
-        }
+        debugPrint('Permission de localisation refusée');
+        return false;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      debugPrint('Permission de localisation désactivée définitivement');
+      await Geolocator.openLocationSettings();
+      return false;
+    }
+
+    return true;
+  }
+
+  /// Vérifie si les services de localisation sont activés
+  Future<bool> _checkLocationService() async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      debugPrint('Les services de localisation sont désactivés');
+    }
+    return serviceEnabled;
+  }
+
+  /// Obtient la position actuelle de l'utilisateur
+  Future<LatLng?> getCurrentPosition() async {
+    try {
+      if (!await _checkAndRequestPermission()) {
+        return null;
       }
 
-      if (permission == LocationPermission.deniedForever) {
-        // Ouvrir les paramètres pour que l'utilisateur puisse activer la permission
-        await Geolocator.openLocationSettings();
-        throw const LocationException(
-          'Permission de localisation désactivée définitivement. '
-          'Veuillez l\'activer dans les paramètres.',
-          null,
-          null,
-          LocationErrorType.permissionDeniedForever,
-        );
+      if (!await _checkLocationService()) {
+        return null;
       }
 
-      // Vérifier si le service de localisation est activé
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        throw const LocationException(
-          'Les services de localisation sont désactivés',
-          null,
-          null,
-          LocationErrorType.serviceDisabled,
-        );
-      }
-
-      // Récupérer la position
-      Position position = await Geolocator.getCurrentPosition(
+      final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 10),
         ),
       );
-
       return LatLng(position.latitude, position.longitude);
-    } on LocationException {
-      rethrow;
     } catch (e) {
-      throw LocationException(
-        'Erreur lors de la récupération de la position',
-        e,
-        null,
-        LocationErrorType.unknown,
-      );
+      debugPrint('Erreur de géolocalisation: $e');
+      return null;
     }
   }
 
-  /// Vérifie si la localisation est disponible
-  Future<bool> isLocationAvailable() async {
-    try {
-      final permission = await Geolocator.checkPermission();
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-
-      return serviceEnabled &&
-          (permission == LocationPermission.always ||
-              permission == LocationPermission.whileInUse);
-    } catch (e) {
-      return false;
+  /// Obtient la position actuelle ou lance une exception
+  Future<LatLng> getCurrentPositionOrThrow() async {
+    final position = await getCurrentPosition();
+    if (position == null) {
+      throw const LocationException('Impossible d\'obtenir la position');
     }
+    return position;
+  }
+
+  /// Démarre l'écoute des changements de position
+  void startListening(
+    void Function(LatLng) onPositionChanged, {
+    int distanceFilter = 10,
+  }) {
+    _positionStream =
+        Geolocator.getPositionStream(
+          locationSettings: LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: distanceFilter,
+          ),
+        ).listen(
+          (Position position) {
+            onPositionChanged(LatLng(position.latitude, position.longitude));
+          },
+          onError: (error) {
+            debugPrint('Erreur du stream de position: $error');
+          },
+        );
+  }
+
+  /// Arrête l'écoute des changements de position
+  void stopListening() {
+    _positionStream?.cancel();
+    _positionStream = null;
   }
 
   /// Calcule la distance entre deux points en mètres
@@ -99,5 +109,9 @@ class LocationService {
       to.latitude,
       to.longitude,
     );
+  }
+
+  void dispose() {
+    stopListening();
   }
 }
