@@ -10,6 +10,7 @@ class PositionModel {
   final String? localImagePath;
   final String authorId;
   final DateTime createdAt;
+  final List<String>? tags;
 
   const PositionModel({
     this.id,
@@ -21,6 +22,7 @@ class PositionModel {
     this.localImagePath,
     required this.authorId,
     required this.createdAt,
+    this.tags,
   });
 
   /// Retourne l'URL complète de l'image (avec le serveur)
@@ -46,6 +48,12 @@ class PositionModel {
         json['image_url'] ??
         json['image'];
 
+    // Parse tags array
+    final tagsData = json['tags'];
+    final List<String>? tags = tagsData != null
+        ? (tagsData as List<dynamic>).map((t) => t.toString()).toList()
+        : null;
+
     return PositionModel(
       id: json['id'],
       title: json['name'] ?? json['title'] ?? '',
@@ -57,6 +65,7 @@ class PositionModel {
       localImagePath: json['local_image_path'],
       authorId: json['author'] ?? json['author_id'] ?? '',
       createdAt: _parseDateTime(json['createdAt'] ?? json['created_at']),
+      tags: tags,
     );
   }
 
@@ -89,6 +98,7 @@ class PositionModel {
       if (imageUrl != null) 'imageUri': imageUrl,
       if (localImagePath != null) 'imagePath': localImagePath,
       'author': authorId,
+      if (tags != null) 'tags': tags,
     };
   }
 
@@ -102,6 +112,7 @@ class PositionModel {
     String? localImagePath,
     String? authorId,
     DateTime? createdAt,
+    List<String>? tags,
   }) {
     return PositionModel(
       id: id ?? this.id,
@@ -113,6 +124,7 @@ class PositionModel {
       localImagePath: localImagePath ?? this.localImagePath,
       authorId: authorId ?? this.authorId,
       createdAt: createdAt ?? this.createdAt,
+      tags: tags ?? this.tags,
     );
   }
 

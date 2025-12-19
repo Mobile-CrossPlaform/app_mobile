@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/position_model.dart';
+import '../models/tag_model.dart';
 import '../services/api_service.dart';
 import '../services/location_service.dart';
 
@@ -15,9 +16,13 @@ class PositionsViewModel extends ChangeNotifier {
   String _searchQuery = '';
   String? _error;
 
+  // Tag state
+  List<TagModel> _tags = [];
+  Set<String> _selectedTags = {};
+
   // Getters
   List<PositionModel> get positions =>
-      _filteredPositions.isEmpty && _searchQuery.isEmpty
+      _filteredPositions.isEmpty && _searchQuery.isEmpty && _selectedTags.isEmpty
       ? _positions
       : _filteredPositions;
   List<PositionModel> get allPositions => _positions;
@@ -26,10 +31,14 @@ class PositionsViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String get searchQuery => _searchQuery;
   String? get error => _error;
+  List<TagModel> get tags => _tags;
+  List<TagModel> get tagFilters =>
+      _tags.isNotEmpty ? _tags : TagModel.fallbackCategories();
+  Set<String> get selectedTags => _selectedTags;
 
   // Initialisation
   Future<void> init() async {
-    await Future.wait([loadPositions(), getUserLocation()]);
+    await Future.wait([loadPositions(), getUserLocation(), loadTags()]);
   }
 
   // Charger toutes les positions
@@ -40,12 +49,23 @@ class PositionsViewModel extends ChangeNotifier {
 
     try {
       _positions = await _apiService.getAllPositions();
-      _applySearch();
+      _applyFilters();
     } catch (e) {
       _error = e.toString();
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  // Charger tous les tags
+  Future<void> loadTags() async {
+    try {
+      _tags = await _apiService.getAllTags();
+      notifyListeners();
+    } catch (e) {
+      // Silently fail for tags - not critical
+      debugPrint('Failed to load tags: $e');
     }
   }
 
@@ -58,26 +78,65 @@ class PositionsViewModel extends ChangeNotifier {
   // Recherche
   void search(String query) {
     _searchQuery = query;
-    _applySearch();
+    _applyFilters();
     notifyListeners();
   }
 
-  void _applySearch() {
-    if (_searchQuery.isEmpty) {
+  void _applyFilters() {
+    if (_searchQuery.isEmpty && _selectedTags.isEmpty) {
       _filteredPositions = [];
-    } else {
+      return;
+    }
+
+    List<PositionModel> result = _positions;
+
+    // Apply search filter
+    if (_searchQuery.isNotEmpty) {
       final queryLower = _searchQuery.toLowerCase();
-      _filteredPositions = _positions.where((position) {
+      result = result.where((position) {
         return position.title.toLowerCase().contains(queryLower) ||
             position.description.toLowerCase().contains(queryLower);
       }).toList();
     }
+
+    // Apply tag filter
+    if (_selectedTags.isNotEmpty) {
+      result = result.where((position) {
+        if (position.tags == null || position.tags!.isEmpty) return false;
+        // Position must have at least one of the selected tags
+        return position.tags!.any((tag) => _selectedTags.contains(tag.toLowerCase()));
+      }).toList();
+    }
+
+    _filteredPositions = result;
   }
 
   void clearSearch() {
     _searchQuery = '';
-    _filteredPositions = [];
+    _applyFilters();
     notifyListeners();
+  }
+
+  // Tag filtering
+  void toggleTag(String tagKey) {
+    final key = tagKey.toLowerCase();
+    if (_selectedTags.contains(key)) {
+      _selectedTags.remove(key);
+    } else {
+      _selectedTags.add(key);
+    }
+    _applyFilters();
+    notifyListeners();
+  }
+
+  void clearTagFilters() {
+    _selectedTags.clear();
+    _applyFilters();
+    notifyListeners();
+  }
+
+  bool isTagSelected(String tagKey) {
+    return _selectedTags.contains(tagKey.toLowerCase());
   }
 
   // Centrer sur une position

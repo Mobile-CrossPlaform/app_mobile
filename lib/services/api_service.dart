@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import '../core/constants.dart';
 import '../core/exceptions.dart';
 import '../models/position_model.dart';
+import '../models/tag_model.dart';
 
 class ApiService {
   // Singleton pattern
@@ -71,6 +72,82 @@ class ApiService {
       if (e is AppException) rethrow;
       throw NetworkException('Erreur de connexion: $e', e);
     }
+  }
+
+  Future<List<TagModel>> getAllTags() async {
+    if (_useMockData) {
+      return _getMockTags();
+    }
+
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$_baseUrl/tags'),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(_timeout);
+
+      if (response.statusCode == 200) {
+        return _parseTagsList(response.body);
+      } else {
+        throw ApiException.fromStatusCode(response.statusCode);
+      }
+    } on http.ClientException catch (e) {
+      throw NetworkException('Impossible de contacter le serveur', e);
+    } catch (e) {
+      if (e is AppException) rethrow;
+      throw NetworkException('Erreur de connexion: $e', e);
+    }
+  }
+
+  /// Parse une réponse JSON en liste de tags
+  List<TagModel> _parseTagsList(String responseBody) {
+    try {
+      final decoded = json.decode(responseBody);
+      final List<dynamic> data;
+
+      if (decoded is List) {
+        data = decoded;
+      } else if (decoded is Map && decoded.containsKey('data')) {
+        data = decoded['data'] as List<dynamic>;
+      } else {
+        throw const ParseException('Format de réponse invalide');
+      }
+
+      return data.map((json) => TagModel.fromJson(json)).toList();
+    } catch (e) {
+      if (e is AppException) rethrow;
+      throw ParseException('Erreur lors du parsing des tags', e);
+    }
+  }
+
+  List<TagModel> _getMockTags() {
+    return [
+      TagModel(
+        id: 1,
+        isOrgin: true,
+        isLevel: false,
+        isPrice: false,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+      TagModel(
+        id: 2,
+        isOrgin: false,
+        isLevel: true,
+        isPrice: false,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+      TagModel(
+        id: 3,
+        isOrgin: false,
+        isLevel: false,
+        isPrice: true,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+    ];
   }
 
   /// Parse une réponse JSON en liste de positions
