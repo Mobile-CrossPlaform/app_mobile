@@ -20,6 +20,7 @@ class _MapViewState extends State<MapView> with WidgetsBindingObserver {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   bool _showSearchResults = false;
+  bool _filtersExpanded = true;
 
   @override
   void initState() {
@@ -138,18 +139,24 @@ class _MapViewState extends State<MapView> with WidgetsBindingObserver {
               ],
             ),
 
-            // Barre de recherche et résultats
+            // Barre de recherche, filtres et résultats
             Positioned(
               top: 16,
               left: 16,
               right: 16,
-              child: Column(
-                children: [
-                  _buildSearchBar(viewModel),
-                  // Liste des résultats de recherche
-                  if (_showSearchResults && viewModel.searchQuery.isNotEmpty)
-                    _buildSearchResults(viewModel),
-                ],
+              child: SafeArea(
+                bottom: false,
+                child: Column(
+                  children: [
+                    _buildSearchBar(viewModel),
+                    const SizedBox(height: AppSpacing.sm),
+                    // Tag filter UI
+                    _buildTagFilters(viewModel),
+                    // Liste des résultats de recherche
+                    if (_showSearchResults && viewModel.searchQuery.isNotEmpty)
+                      _buildSearchResults(viewModel),
+                  ],
+                ),
               ),
             ),
 
@@ -278,6 +285,135 @@ class _MapViewState extends State<MapView> with WidgetsBindingObserver {
         ),
       ),
     );
+  }
+
+  Widget _buildTagFilters(PositionsViewModel viewModel) {
+    final tags = viewModel.tagFilters;
+    final selectedCount = viewModel.selectedTags.length;
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppSizes.cardBorderRadius),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.xs,
+        ),
+        child: Column(
+          children: [
+            InkWell(
+              borderRadius: BorderRadius.circular(AppSizes.cardBorderRadius),
+              onTap: () => setState(() => _filtersExpanded = !_filtersExpanded),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: AppSpacing.xs,
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.tune, size: 18),
+                    const SizedBox(width: AppSpacing.sm),
+                    Text(
+                      'Filtres',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    if (selectedCount > 0) ...[
+                      const SizedBox(width: AppSpacing.xs),
+                      Text(
+                        '($selectedCount)',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ],
+                    const Spacer(),
+                    if (selectedCount > 0)
+                      Tooltip(
+                        message: 'Effacer les filtres',
+                        child: IconButton(
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.clear),
+                          onPressed: viewModel.clearTagFilters,
+                        ),
+                      ),
+                    Icon(
+                      _filtersExpanded
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            AnimatedCrossFade(
+              duration: const Duration(milliseconds: 180),
+              crossFadeState: _filtersExpanded
+                  ? CrossFadeState.showFirst
+                  : CrossFadeState.showSecond,
+              firstChild: Padding(
+                padding: const EdgeInsets.only(
+                  left: AppSpacing.sm,
+                  right: AppSpacing.sm,
+                  bottom: AppSpacing.xs,
+                ),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (final tag in tags) ...[
+                          _buildTagChip(viewModel, tag),
+                          const SizedBox(width: AppSpacing.sm),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              secondChild: const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTagChip(PositionsViewModel viewModel, dynamic tag) {
+    // dynamic to keep this view-file self-contained (TagModel lives in models)
+    final isSelected = viewModel.isTagSelected(tag.categoryKey as String);
+    final count = _countPositionsForTag(viewModel, tag.categoryKey as String);
+    final label = count > 0 ? '${tag.categoryName} · $count' : tag.categoryName;
+
+    return FilterChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (_) => viewModel.toggleTag(tag.categoryKey as String),
+      selectedColor: Theme.of(context).colorScheme.primaryContainer,
+      checkmarkColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: Colors.white,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+      side: BorderSide(
+        color: isSelected
+            ? Theme.of(context).colorScheme.primary.withOpacity(0.25)
+            : Colors.grey.withOpacity(0.25),
+      ),
+    );
+  }
+
+  int _countPositionsForTag(PositionsViewModel viewModel, String tagKey) {
+    final key = tagKey.toLowerCase();
+    return viewModel.allPositions.where((p) {
+      final tags = p.tags;
+      if (tags == null || tags.isEmpty) return false;
+      return tags.any((t) => t.toLowerCase() == key);
+    }).length;
   }
 
   void _goToPosition(PositionModel position) {

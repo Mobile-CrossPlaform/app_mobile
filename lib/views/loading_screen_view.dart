@@ -14,6 +14,9 @@ class LoadingScreenView extends StatefulWidget {
 class _LoadingScreenViewState extends State<LoadingScreenView> {
   bool _dialogOpen = false;
 
+  /// Durée minimale d'affichage de l'écran de chargement
+  static const Duration _minDisplayDuration = Duration(milliseconds: 1500);
+
   @override
   void initState() {
     super.initState();
@@ -24,7 +27,14 @@ class _LoadingScreenViewState extends State<LoadingScreenView> {
 
   Future<void> _checkConnection() async {
     final viewModel = context.read<AppBootstrapViewModel>();
-    final success = await viewModel.checkServer();
+
+    // Exécuter la vérification serveur ET le délai minimum en parallèle
+    final results = await Future.wait([
+      viewModel.checkServer(),
+      Future.delayed(_minDisplayDuration),
+    ]);
+
+    final success = results[0] as bool;
 
     if (!mounted) return;
 
@@ -139,17 +149,15 @@ class _LoadingScreenViewState extends State<LoadingScreenView> {
                 ),
                 const SizedBox(height: AppSpacing.xxl),
 
-                // Indicateur de chargement
-                if (viewModel.isChecking) ...[
-                  const CircularProgressIndicator(),
-                  const SizedBox(height: AppSpacing.lg),
-                  Text(
-                    'Connexion au serveur...',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[600],
-                    ),
+                // Indicateur de chargement (toujours visible sur cet écran)
+                const CircularProgressIndicator(),
+                const SizedBox(height: AppSpacing.lg),
+                Text(
+                  'Connexion au serveur...',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.grey[600],
                   ),
-                ],
+                ),
               ],
             ),
           );

@@ -29,6 +29,24 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  # Splash screen native personnalisé
+  flutter_native_splash: ^2.4.0
 
 flutter:
   uses-material-design: true
+
+# Configuration du splash screen natif
+flutter_native_splash:
+  # Couleur de fond (blanc pour correspondre au thème clair)
+  color: "#FFFFFF"
+  
+  # Couleur de fond pour le mode sombre
+  color_dark: "#1a1a2e"
+  
+  # Configuration Android 12+ (Material You)
+  android_12:
+    color: "#FFFFFF"
+    color_dark: "#1a1a2e"
+  
+  # Afficher en plein écran (sans barre de statut)
+  fullscreen: false
