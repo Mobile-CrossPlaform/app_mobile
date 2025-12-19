@@ -36,6 +36,18 @@ class PositionsViewModel extends ChangeNotifier {
       _tags.isNotEmpty ? _tags : TagModel.fallbackCategories();
   Set<String> get selectedTags => _selectedTags;
 
+  /// Extracts unique tag values from all positions (for filter chips)
+  List<String> get availableTags {
+    final tagSet = <String>{};
+    for (final position in _positions) {
+      if (position.tags != null) {
+        tagSet.addAll(position.tags!);
+      }
+    }
+    final sorted = tagSet.toList()..sort();
+    return sorted;
+  }
+
   // Initialisation
   Future<void> init() async {
     await Future.wait([loadPositions(), getUserLocation(), loadTags()]);

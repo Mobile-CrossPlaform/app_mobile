@@ -288,7 +288,7 @@ class _MapViewState extends State<MapView> with WidgetsBindingObserver {
   }
 
   Widget _buildTagFilters(PositionsViewModel viewModel) {
-    final tags = viewModel.tagFilters;
+    final tags = viewModel.availableTags;
     final selectedCount = viewModel.selectedTags.length;
 
     return Card(
@@ -384,16 +384,16 @@ class _MapViewState extends State<MapView> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildTagChip(PositionsViewModel viewModel, dynamic tag) {
-    // dynamic to keep this view-file self-contained (TagModel lives in models)
-    final isSelected = viewModel.isTagSelected(tag.categoryKey as String);
-    final count = _countPositionsForTag(viewModel, tag.categoryKey as String);
-    final label = count > 0 ? '${tag.categoryName} · $count' : tag.categoryName;
+  Widget _buildTagChip(PositionsViewModel viewModel, String tag) {
+    final isSelected = viewModel.isTagSelected(tag);
+    final count = _countPositionsForTag(viewModel, tag);
+    final displayName = _formatTagName(tag);
+    final label = count > 0 ? '$displayName · $count' : displayName;
 
     return FilterChip(
       label: Text(label),
       selected: isSelected,
-      onSelected: (_) => viewModel.toggleTag(tag.categoryKey as String),
+      onSelected: (_) => viewModel.toggleTag(tag),
       selectedColor: Theme.of(context).colorScheme.primaryContainer,
       checkmarkColor: Theme.of(context).colorScheme.primary,
       backgroundColor: Colors.white,
@@ -407,13 +407,23 @@ class _MapViewState extends State<MapView> with WidgetsBindingObserver {
     );
   }
 
-  int _countPositionsForTag(PositionsViewModel viewModel, String tagKey) {
-    final key = tagKey.toLowerCase();
+  int _countPositionsForTag(PositionsViewModel viewModel, String tag) {
+    final key = tag.toLowerCase();
     return viewModel.allPositions.where((p) {
       final tags = p.tags;
       if (tags == null || tags.isEmpty) return false;
       return tags.any((t) => t.toLowerCase() == key);
     }).length;
+  }
+
+  /// Formats a tag key like "fine-dining" to "Fine Dining"
+  String _formatTagName(String tag) {
+    return tag
+        .split('-')
+        .map((word) => word.isNotEmpty
+            ? '${word[0].toUpperCase()}${word.substring(1)}'
+            : '')
+        .join(' ');
   }
 
   void _goToPosition(PositionModel position) {
@@ -479,6 +489,7 @@ class _MapViewState extends State<MapView> with WidgetsBindingObserver {
                     borderRadius: BorderRadius.circular(
                       AppSizes.cardBorderRadius,
                     ),
+                    tags: position.tags,
                   ),
                 const SizedBox(height: AppSpacing.lg),
                 Text(

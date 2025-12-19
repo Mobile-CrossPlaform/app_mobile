@@ -9,6 +9,7 @@ class PositionImage extends StatelessWidget {
   final double height;
   final BoxFit fit;
   final BorderRadius? borderRadius;
+  final List<String>? tags; // Tags shown below the image when provided
 
   const PositionImage({
     super.key,
@@ -17,6 +18,7 @@ class PositionImage extends StatelessWidget {
     this.height = AppSizes.cardImageHeight,
     this.fit = BoxFit.cover,
     this.borderRadius,
+    this.tags,
   });
 
   @override
@@ -47,11 +49,37 @@ class PositionImage extends StatelessWidget {
       imageWidget = _buildPlaceholder();
     }
 
-    if (borderRadius != null) {
-      return ClipRRect(borderRadius: borderRadius!, child: imageWidget);
+    // Apply border radius to the image only
+    final clippedImage = borderRadius != null
+        ? ClipRRect(borderRadius: borderRadius!, child: imageWidget)
+        : imageWidget;
+
+    // If tags exist, render them below the image
+    if (tags != null && tags!.isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          clippedImage,
+          const SizedBox(height: AppSpacing.sm),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: tags!
+                .map(
+                  (tag) => Chip(
+                    label: Text(tag),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      );
     }
 
-    return imageWidget;
+    return clippedImage;
   }
 
   Widget _buildLoading() {
